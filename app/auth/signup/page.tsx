@@ -8,11 +8,11 @@ import { buttonVariants } from "@/components/ui/button"
 import { UserAuthForm } from "@/components/UserAuthForm"
 
 export const metadata: Metadata = {
-  title: "Authentication",
-  description: "Authentication forms built using the components.",
+  title: "Sign Up",
+  description: "Create a new account to get started.",
 }
 
-export default function AuthenticationPage() {
+export default function SignUpPage() {
   return (
     <>
       <div className="container relative h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0">
@@ -24,7 +24,7 @@ export default function AuthenticationPage() {
           <div className="relative z-20 mt-auto">
             <blockquote className="space-y-2">
               <p className="text-lg">
-                Track and share your stock market performance with the community.
+                Create an account to track and share your stock market performance with the community.
               </p>
             </blockquote>
           </div>
@@ -33,22 +33,13 @@ export default function AuthenticationPage() {
           <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
             <div className="flex flex-col space-y-2 text-center">
               <h1 className="text-2xl font-semibold tracking-tight">
-                Sign in to your account
+                Create an account
               </h1>
               <p className="text-sm text-muted-foreground">
-                Choose your preferred sign in method
+                Sign up to start tracking your portfolio
               </p>
             </div>
-            <UserAuthForm />
-            <p className="text-center text-sm">
-              Don't have an account?{" "}
-              <Link
-                href="/auth/signup"
-                className="underline underline-offset-4 hover:text-primary"
-              >
-                Sign up
-              </Link>
-            </p>
+            <UserAuthForm mode="signup" />
             <p className="px-8 text-center text-sm text-muted-foreground">
               By clicking continue, you agree to our{" "}
               <Link

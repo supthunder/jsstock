@@ -4,7 +4,7 @@ import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 
 // Mock users for development and demonstration
-const mockUsers = [
+let mockUsers = [
   {
     id: "1",
     name: "John Smith",
@@ -28,8 +28,9 @@ const mockUsers = [
     role: "user",
     watchlist: ["TSLA", "NVDA", "AMZN"],
     portfolio: [
-      { symbol: "TSLA", quantity: 3, avgCost: 242.56 },
-      { symbol: "AMZN", quantity: 2, avgCost: 178.21 },
+      { symbol: "TSLA", quantity: 3, avgCost: 210.76 },
+      { symbol: "NVDA", quantity: 8, avgCost: 425.50 },
+      { symbol: "AMZN", quantity: 1, avgCost: 178.23 },
     ]
   },
   {
@@ -54,23 +55,55 @@ const handler = NextAuth({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        name: { label: "Name", type: "text" },
+        action: { label: "Action", type: "text" } // 'signin' or 'signup'
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        try {
+          if (!credentials) {
+            return null
+          }
+          
+          const { email, password, name, action } = credentials
+
+          // Registration flow
+          if (action === 'signup' && name) {
+            // Check if user already exists
+            const existingUser = mockUsers.find(user => user.email === email)
+            if (existingUser) {
+              throw new Error("User already exists")
+            }
+            
+            // In a real application, you would create a user in the database
+            // For this demo, we'll add to our mockUsers array
+            const newUser = {
+              id: String(mockUsers.length + 1),
+              name,
+              email,
+              password,
+              image: `https://i.pravatar.cc/150?u=${name.split(' ')[0].toLowerCase()}`,
+              role: "user",
+              watchlist: [],
+              portfolio: []
+            }
+            
+            mockUsers.push(newUser)
+            return newUser
+          }
+          
+          // Regular sign in flow
+          const user = mockUsers.find(user => user.email === email)
+          
+          if (user && user.password === password) {
+            return user
+          }
+          
+          return null
+        } catch (error) {
+          console.error("Auth error:", error)
           return null
         }
-
-        // In a real app, you would look this up in a database
-        const user = mockUsers.find(user => user.email === credentials.email)
-        
-        if (user && user.password === credentials.password) {
-          // Any user object returned here will be saved in the JSON Web Token
-          const { password, ...userWithoutPassword } = user
-          return userWithoutPassword
-        }
-        
-        return null
       }
     }),
     GithubProvider({

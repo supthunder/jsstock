@@ -8,12 +8,16 @@ import { Label } from "@/components/ui/label"
 import { signIn } from "next-auth/react"
 import { Github, Mail } from "lucide-react"
 
-interface UserAuthFormProps extends React.HTMLAttributes<HTMLDivElement> {}
+interface UserAuthFormProps extends React.HTMLAttributes<HTMLDivElement> {
+  mode?: "signin" | "signup"
+}
 
-export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
+export function UserAuthForm({ className, mode = "signin", ...props }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = React.useState<boolean>(false)
+  const [authMode, setAuthMode] = React.useState<"signin" | "signup">(mode)
   const [email, setEmail] = React.useState<string>("")
   const [password, setPassword] = React.useState<string>("")
+  const [name, setName] = React.useState<string>("")
   const [error, setError] = React.useState<string | null>(null)
 
   async function onSubmit(provider: string) {
@@ -22,16 +26,35 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
 
     try {
       if (provider === 'credentials') {
-        const result = await signIn('credentials', {
-          redirect: true,
-          email,
-          password,
-          callbackUrl: '/',
-        })
+        if (authMode === 'signup') {
+          // Sign up with credentials
+          const result = await signIn('credentials', {
+            redirect: true,
+            email,
+            password,
+            name,
+            action: 'signup',
+            callbackUrl: '/',
+          })
 
-        if (result?.error) {
-          setError("Invalid email or password")
-          setIsLoading(false)
+          if (result?.error) {
+            setError(result.error)
+            setIsLoading(false)
+          }
+        } else {
+          // Normal sign in
+          const result = await signIn('credentials', {
+            redirect: true,
+            email,
+            password,
+            action: 'signin',
+            callbackUrl: '/',
+          })
+
+          if (result?.error) {
+            setError("Invalid email or password")
+            setIsLoading(false)
+          }
         }
       } else {
         await signIn(provider, {
@@ -49,6 +72,25 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
     <div className={cn("grid gap-6", className)} {...props}>
       <div className="grid gap-2">
         <div className="grid gap-1">
+          {authMode === "signup" && (
+            <>
+              <Label className="sr-only" htmlFor="name">
+                Name
+              </Label>
+              <Input
+                id="name"
+                placeholder="Name"
+                type="text"
+                autoCapitalize="words"
+                autoComplete="name"
+                autoCorrect="off"
+                disabled={isLoading}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mb-2"
+              />
+            </>
+          )}
           <Label className="sr-only" htmlFor="email">
             Email
           </Label>
@@ -71,18 +113,19 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
             placeholder="Password"
             type="password"
             autoCapitalize="none"
-            autoComplete="current-password"
+            autoComplete={authMode === "signup" ? "new-password" : "current-password"}
             autoCorrect="off"
             disabled={isLoading}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            className="mt-2"
           />
         </div>
         <Button 
           onClick={() => onSubmit('credentials')} 
           disabled={isLoading}
         >
-          {isLoading ? "Signing in..." : "Sign In with Email"}
+          {isLoading ? "Processing..." : (authMode === "signin" ? "Sign In with Email" : "Sign Up with Email")}
         </Button>
         {error && (
           <p className="text-sm text-red-500">{error}</p>
@@ -123,10 +166,35 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
           ) : (
             <>
               <Mail className="mr-2 h-4 w-4" />
-              Email
+              Google
             </>
           )}
         </Button>
+      </div>
+      <div className="text-center text-sm">
+        {authMode === "signin" ? (
+          <p>
+            Don't have an account?{" "}
+            <Button 
+              variant="link" 
+              className="p-0 h-auto font-normal" 
+              onClick={() => setAuthMode("signup")}
+            >
+              Sign up
+            </Button>
+          </p>
+        ) : (
+          <p>
+            Already have an account?{" "}
+            <Button 
+              variant="link" 
+              className="p-0 h-auto font-normal" 
+              onClick={() => setAuthMode("signin")}
+            >
+              Sign in
+            </Button>
+          </p>
+        )}
       </div>
       <div className="text-center text-sm text-muted-foreground">
         <p>Demo accounts:</p>
