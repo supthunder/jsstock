@@ -2,54 +2,72 @@ import NextAuth from "next-auth"
 import GithubProvider from "next-auth/providers/github"
 import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
+import { PrismaAdapter } from "@auth/prisma-adapter"
+import { prisma } from "@/lib/prisma"
+import { compare, hash } from "bcryptjs"
+import type { NextAuthOptions } from "next-auth"
+import type { Adapter } from "next-auth/adapters"
 
-// Mock users for development and demonstration
-let mockUsers = [
-  {
-    id: "1",
-    name: "John Smith",
-    email: "john@example.com",
-    image: "https://i.pravatar.cc/150?u=john",
-    password: "password123",
-    role: "admin",
-    watchlist: ["AAPL", "MSFT", "GOOGL"],
-    portfolio: [
-      { symbol: "AAPL", quantity: 10, avgCost: 155.85 },
-      { symbol: "MSFT", quantity: 5, avgCost: 325.72 },
-      { symbol: "GOOGL", quantity: 2, avgCost: 140.21 },
-    ]
-  },
-  {
-    id: "2",
-    name: "Alice Johnson",
-    email: "alice@example.com",
-    image: "https://i.pravatar.cc/150?u=alice",
-    password: "password123",
-    role: "user",
-    watchlist: ["TSLA", "NVDA", "AMZN"],
-    portfolio: [
-      { symbol: "TSLA", quantity: 3, avgCost: 210.76 },
-      { symbol: "NVDA", quantity: 8, avgCost: 425.50 },
-      { symbol: "AMZN", quantity: 1, avgCost: 178.23 },
-    ]
-  },
-  {
-    id: "3",
-    name: "Bob Williams",
-    email: "bob@example.com",
-    image: "https://i.pravatar.cc/150?u=bob",
-    password: "password123",
-    role: "user",
-    watchlist: ["NFLX", "META", "DIS"],
-    portfolio: [
-      { symbol: "NFLX", quantity: 4, avgCost: 586.75 },
-      { symbol: "META", quantity: 8, avgCost: 342.32 },
-      { symbol: "DIS", quantity: 12, avgCost: 109.48 },
-    ]
+// Seed initial users (only in development)
+const seedInitialUsers = async () => {
+  // Only seed if the database is empty
+  const userCount = await prisma.user.count();
+  
+  if (userCount === 0) {
+    try {
+      // Create sample users
+      const hashedPassword = await hash("password123", 10);
+      
+      await prisma.user.create({
+        data: {
+          name: "John Smith",
+          email: "john@example.com",
+          image: "/avatars/01.png",
+          password: hashedPassword,
+          role: "admin",
+          watchlist: ["AAPL", "MSFT", "GOOGL"],
+          portfolio: {
+            create: [
+              { symbol: "AAPL", quantity: 10, avgCost: 155.85 },
+              { symbol: "MSFT", quantity: 5, avgCost: 325.72 },
+              { symbol: "GOOGL", quantity: 2, avgCost: 140.21 },
+            ]
+          }
+        }
+      });
+      
+      await prisma.user.create({
+        data: {
+          name: "Alice Johnson",
+          email: "alice@example.com",
+          image: "/avatars/02.png",
+          password: hashedPassword,
+          role: "user",
+          watchlist: ["TSLA", "NVDA", "AMZN"],
+          portfolio: {
+            create: [
+              { symbol: "TSLA", quantity: 3, avgCost: 210.76 },
+              { symbol: "NVDA", quantity: 8, avgCost: 425.50 },
+              { symbol: "AMZN", quantity: 1, avgCost: 178.23 },
+            ]
+          }
+        }
+      });
+      
+      console.log("Created demo users");
+    } catch (error) {
+      console.error("Error seeding users:", error);
+    }
   }
-]
+};
 
-const handler = NextAuth({
+// Try to seed initial users (won't run in production)
+if (process.env.NODE_ENV !== 'production') {
+  seedInitialUsers();
+}
+
+export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma) as Adapter,
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -59,7 +77,7 @@ const handler = NextAuth({
         name: { label: "Name", type: "text" },
         action: { label: "Action", type: "text" } // 'signin' or 'signup'
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         try {
           if (!credentials) {
             return null
@@ -70,36 +88,65 @@ const handler = NextAuth({
           // Registration flow
           if (action === 'signup' && name) {
             // Check if user already exists
-            const existingUser = mockUsers.find(user => user.email === email)
+            const existingUser = await prisma.user.findUnique({
+              where: { email }
+            });
+            
             if (existingUser) {
               throw new Error("User already exists")
             }
             
-            // In a real application, you would create a user in the database
-            // For this demo, we'll add to our mockUsers array
-            const newUser = {
-              id: String(mockUsers.length + 1),
-              name,
-              email,
-              password,
-              image: `https://i.pravatar.cc/150?u=${name.split(' ')[0].toLowerCase()}`,
-              role: "user",
-              watchlist: [],
-              portfolio: []
-            }
+            // Create user in the database
+            const hashedPassword = await hash(password, 10);
             
-            mockUsers.push(newUser)
-            return newUser
+            const newUser = await prisma.user.create({
+              data: {
+                name,
+                email,
+                password: hashedPassword,
+                image: `/avatars/0${Math.floor(Math.random() * 5) + 1}.png`,
+                role: "user",
+                watchlist: []
+              }
+            });
+            
+            // Return user without portfolio initially
+            return {
+              id: newUser.id,
+              name: newUser.name,
+              email: newUser.email,
+              image: newUser.image,
+              role: newUser.role,
+              watchlist: newUser.watchlist
+            }
           }
           
           // Regular sign in flow
-          const user = mockUsers.find(user => user.email === email)
+          const user = await prisma.user.findUnique({
+            where: { email },
+            include: {
+              portfolio: true
+            }
+          });
           
-          if (user && user.password === password) {
-            return user
+          if (!user) {
+            return null;
           }
           
-          return null
+          // For demo accounts, allow simple password check
+          if (email.endsWith('@example.com') && password === 'password123') {
+            return user;
+          }
+          
+          // For regular accounts, verify hashed password
+          if (user.password) {
+            const isValidPassword = await compare(password, user.password);
+            if (isValidPassword) {
+              return user;
+            }
+          }
+          
+          return null;
         } catch (error) {
           console.error("Auth error:", error)
           return null
@@ -124,9 +171,22 @@ const handler = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        token.role = user.role
-        token.watchlist = user.watchlist
-        token.portfolio = user.portfolio
+        token.role = user.role as string
+        
+        // Get user data from database
+        if (user.id) {
+          const userData = await prisma.user.findUnique({
+            where: { id: user.id },
+            include: {
+              portfolio: true
+            }
+          });
+          
+          if (userData) {
+            token.watchlist = userData.watchlist;
+            token.portfolio = userData.portfolio;
+          }
+        }
       }
       return token
     },
@@ -135,10 +195,10 @@ const handler = NextAuth({
         ...session,
         user: {
           ...session.user,
-          id: token.id,
-          role: token.role,
-          watchlist: token.watchlist,
-          portfolio: token.portfolio,
+          id: token.id as string,
+          role: token.role as string,
+          watchlist: token.watchlist as string[],
+          portfolio: token.portfolio as any[],
         },
       }
     },
@@ -147,6 +207,8 @@ const handler = NextAuth({
     strategy: "jwt",
   },
   secret: process.env.NEXTAUTH_SECRET,
-})
+}
+
+export const handler = NextAuth(authOptions)
 
 export { handler as GET, handler as POST } 

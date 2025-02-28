@@ -1,11 +1,6 @@
 import NextAuth, { DefaultSession } from "next-auth"
 import { JWT } from "next-auth/jwt"
-
-type Portfolio = {
-  symbol: string;
-  quantity: number;
-  avgCost: number;
-}
+import { Portfolio } from "@prisma/client"
 
 declare module "next-auth" {
   /**
@@ -13,9 +8,9 @@ declare module "next-auth" {
    */
   interface User {
     id: string;
-    role: string;
-    watchlist: string[];
-    portfolio: Portfolio[];
+    role?: string;
+    watchlist?: string[];
+    portfolio?: Portfolio[];
   }
 
   /**
