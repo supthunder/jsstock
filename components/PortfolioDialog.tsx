@@ -32,7 +32,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandLoading,
 } from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -436,7 +435,11 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                       />
                       <CommandList>
                         {isSearching ? (
-                          <CommandLoading>Searching...</CommandLoading>
+                          <CommandEmpty className="py-6 text-center text-sm">
+                            <div className="flex items-center justify-center">
+                              <span className="mr-2">Searching...</span>
+                            </div>
+                          </CommandEmpty>
                         ) : searchResults.length === 0 ? (
                           <CommandEmpty>
                             {searchQuery.length > 1 
