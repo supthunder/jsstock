@@ -1,89 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POLYGON_API_KEY, API_RATE_LIMITS } from "@/lib/utils";
-import { popularStocks, searchSymbols } from "@/lib/api";
+import { searchStocks } from "@/lib/stockApi";
+
+// Sample popular stocks for fallback
+const popularStocks = [
+  { symbol: "AAPL", name: "Apple Inc.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "MSFT", name: "Microsoft Corporation", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "GOOGL", name: "Alphabet Inc.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "AMZN", name: "Amazon.com Inc.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "META", name: "Meta Platforms Inc.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "TSLA", name: "Tesla Inc.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "NVDA", name: "NVIDIA Corporation", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "V", name: "Visa Inc.", type: "stock", market: "US", currencySymbol: "$" },
+  { symbol: "JNJ", name: "Johnson & Johnson", type: "stock", market: "US", currencySymbol: "$" },
+];
 
 // GET /api/stocks/search?q=apple
 export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const query = searchParams.get("q");
+  
+  console.log(`🔍 Stocks search API called with query: ${query}`);
+  
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const query = searchParams.get("q");
-
-    console.log("Stock search API called with query:", query);
-
-    if (!query) {
-      return NextResponse.json(
-        { error: "Search query is required" },
-        { status: 400 }
-      );
-    }
-
-    // If query is less than 2 characters, return a limited set of popular stocks
-    if (query.length < 2) {
+    // If no query or query is too short, return popular stocks
+    if (!query || query.length < 2) {
       console.log("Query too short, returning popular stocks");
-      const mockResults = popularStocks.slice(0, 5).map(symbol => ({
-        symbol,
-        name: `${symbol} Stock`,
-        type: "stock"
-      }));
-      return NextResponse.json(mockResults);
-    }
-
-    // Try searching with our fallback-enabled function
-    try {
-      console.log("Calling searchSymbols with query:", query);
-      const data = await searchSymbols(query);
-      console.log("Search API response:", JSON.stringify(data));
-      
-      // Format the results in a consistent way regardless of which API provided the data
-      if (data && data.bestMatches && Array.isArray(data.bestMatches) && data.bestMatches.length > 0) {
-        const results = data.bestMatches.map((item: any) => ({
-          symbol: item["1. symbol"],
-          name: item["2. name"],
-          type: item["3. type"].toLowerCase(),
-          market: item["4. region"]
-        }));
-        
-        console.log("Formatted search results:", JSON.stringify(results));
-        return NextResponse.json(results);
-      } else {
-        console.log("No bestMatches found in data, using fallback");
-      }
-    } catch (error) {
-      console.error("Error from search API:", error);
-      // Continue to fallback if the enhanced API call fails
+      return NextResponse.json(popularStocks);
     }
     
-    // Final fallback to mock data if everything else fails
-    console.log("Using final fallback with filtered popularStocks");
-    const filteredStocks = popularStocks
-      .filter(s => s.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 5)
-      .map(symbol => ({
-        symbol,
-        name: `${symbol} Stock`,
-        type: "stock"
-      }));
-      
-    console.log("Fallback results:", JSON.stringify(filteredStocks));
-    return NextResponse.json(filteredStocks);
+    // Use our normalized search function with built-in caching
+    const results = await searchStocks(query);
+    
+    console.log(`📊 Search found ${results.length} results for "${query}"`);
+    
+    // If no results found, return filtered popular stocks
+    if (!results || results.length === 0) {
+      console.log("No results found, returning filtered popular stocks");
+      const filteredPopular = popularStocks.filter(stock => 
+        stock.symbol.toLowerCase().includes(query.toLowerCase()) || 
+        stock.name.toLowerCase().includes(query.toLowerCase())
+      );
+      return NextResponse.json(filteredPopular);
+    }
+    
+    return NextResponse.json(results);
   } catch (error) {
-    console.error("Error searching stocks:", error);
+    console.error("❌ Error in stocks search API:", error);
     
-    // Fallback to mock data if everything fails
-    const searchParams = request.nextUrl.searchParams;
-    const query = searchParams.get("q") || "";
+    // Fallback to filtered popular stocks on error
+    const filteredPopular = popularStocks.filter(stock => 
+      stock.symbol.toLowerCase().includes(query?.toLowerCase() || "") || 
+      stock.name.toLowerCase().includes(query?.toLowerCase() || "")
+    );
     
-    console.log("Error fallback for query:", query);
-    const filteredStocks = popularStocks
-      .filter(s => s.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 5)
-      .map(symbol => ({
-        symbol,
-        name: `${symbol} Stock`,
-        type: "stock"
-      }));
-      
-    console.log("Error fallback results:", JSON.stringify(filteredStocks));
-    return NextResponse.json(filteredStocks);
+    if (filteredPopular.length > 0) {
+      console.log("Returning filtered popular stocks as fallback");
+      return NextResponse.json(filteredPopular);
+    }
+    
+    return NextResponse.json(popularStocks);
   }
 } 
