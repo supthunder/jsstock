@@ -133,6 +133,16 @@ export function StockTable({ type = 'all' }: StockTableProps) {
 
   const filteredStocks = filterStocksByType(sortedStocks, filter)
 
+  // Apply additional filters based on the type prop
+  let displayedStocks = filteredStocks;
+  
+  // Filter to only show watchlist stocks if type is 'watchlist'
+  if (type === 'watchlist' && session?.user?.watchlist) {
+    displayedStocks = displayedStocks.filter(stock => 
+      session.user.watchlist.includes(stock.symbol)
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex space-x-2 pb-4">
@@ -147,102 +157,111 @@ export function StockTable({ type = 'all' }: StockTableProps) {
           </Button>
         ))}
       </div>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="w-[100px]">
-                <Button variant="ghost" size="sm" onClick={() => handleSort('rank')}>
-                  Rank
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>Symbol</TableHead>
-              <TableHead>
-                <Button variant="ghost" size="sm" onClick={() => handleSort('pnl1d')}>
-                  1D PNL
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>7D PNL</TableHead>
-              <TableHead>30D PNL</TableHead>
-              <TableHead>
-                <Button variant="ghost" size="sm" onClick={() => handleSort('winRate')}>
-                  Win Rate
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>Distribution</TableHead>
-              <TableHead>Performance</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Avg Cost</TableHead>
-              <TableHead>Last Trade</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={11} className="text-center">Loading...</TableCell>
+      {session && type === 'watchlist' && displayedStocks.length === 0 ? (
+        <div className="text-center p-8 border rounded-md">
+          <h3 className="text-lg font-medium">Your watchlist is empty</h3>
+          <p className="text-muted-foreground">
+            Add stocks to your watchlist to track them here.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-[100px]">
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('rank')}>
+                    Rank
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </TableHead>
+                <TableHead>Symbol</TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('pnl1d')}>
+                    1D PNL
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </TableHead>
+                <TableHead>7D PNL</TableHead>
+                <TableHead>30D PNL</TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('winRate')}>
+                    Win Rate
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </TableHead>
+                <TableHead>Distribution</TableHead>
+                <TableHead>Performance</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Avg Cost</TableHead>
+                <TableHead>Last Trade</TableHead>
               </TableRow>
-            ) : (
-              filteredStocks.map((stock, index) => (
-                <TableRow 
-                  key={stock.symbol} 
-                  className="hover:bg-muted/50 cursor-pointer"
-                  onClick={() => handleRowClick(stock)}
-                >
-                  <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <Avatar className="h-8 w-8 mr-2">
-                        <AvatarFallback>{stock.symbol.slice(0, 2)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">{stock.symbol}</div>
-                        <div className="text-sm text-muted-foreground">{stock.name}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className={stock.todaysChange >= 0 ? "text-green-500" : "text-red-500"}>
-                      {stock.todaysChange >= 0 ? "+" : ""}{stock.todaysChangePerc.toFixed(1)}%
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {stock.todaysChange >= 0 ? "+" : ""}${stock.todaysChange.toFixed(2)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-green-500">+5.2%</div>
-                    <div className="text-sm text-muted-foreground">+$8,120.8</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-green-500">+6.1%</div>
-                    <div className="text-sm text-muted-foreground">+$23.6K</div>
-                  </TableCell>
-                  <TableCell>{stock.winRate.toFixed(1)}%</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Badge variant="secondary">{stock.wins}</Badge>
-                      <Badge variant="destructive">{stock.losses}</Badge>
-                      <Badge variant="destructive">{stock.draws}</Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="w-[80px] h-[30px]">
-                      <Sparklines data={stock.performance || [5,10,5,20,8,15,12,8,20]}>
-                        <SparklinesLine color={stock.todaysChange >= 0 ? "#22c55e" : "#ef4444"} />
-                      </Sparklines>
-                    </div>
-                  </TableCell>
-                  <TableCell>2d</TableCell>
-                  <TableCell>${(stock.c || 0).toFixed(2)}</TableCell>
-                  <TableCell>1h ago</TableCell>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center">Loading...</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                displayedStocks.map((stock, index) => (
+                  <TableRow 
+                    key={stock.symbol} 
+                    className="hover:bg-muted/50 cursor-pointer"
+                    onClick={() => handleRowClick(stock)}
+                  >
+                    <TableCell className="font-medium">{index + 1}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <Avatar className="h-8 w-8 mr-2">
+                          <AvatarFallback>{stock.symbol.slice(0, 2)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{stock.symbol}</div>
+                          <div className="text-sm text-muted-foreground">{stock.name}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className={stock.todaysChange >= 0 ? "text-green-500" : "text-red-500"}>
+                        {stock.todaysChange >= 0 ? "+" : ""}{stock.todaysChangePerc.toFixed(1)}%
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {stock.todaysChange >= 0 ? "+" : ""}${stock.todaysChange.toFixed(2)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-green-500">+5.2%</div>
+                      <div className="text-sm text-muted-foreground">+$8,120.8</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-green-500">+6.1%</div>
+                      <div className="text-sm text-muted-foreground">+$23.6K</div>
+                    </TableCell>
+                    <TableCell>{stock.winRate.toFixed(1)}%</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Badge variant="secondary">{stock.wins}</Badge>
+                        <Badge variant="destructive">{stock.losses}</Badge>
+                        <Badge variant="destructive">{stock.draws}</Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="w-[80px] h-[30px]">
+                        <Sparklines data={stock.performance || [5,10,5,20,8,15,12,8,20]}>
+                          <SparklinesLine color={stock.todaysChange >= 0 ? "#22c55e" : "#ef4444"} />
+                        </Sparklines>
+                      </div>
+                    </TableCell>
+                    <TableCell>2d</TableCell>
+                    <TableCell>${(stock.c || 0).toFixed(2)}</TableCell>
+                    <TableCell>1h ago</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       
       <StockDetailDialog 
         stock={selectedStock}
