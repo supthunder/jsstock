@@ -461,7 +461,11 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                       <CommandInput 
                         placeholder="Search for a stock..." 
                         value={searchQuery}
-                        onValueChange={setSearchQuery}
+                        onValueChange={(value) => {
+                          setSearchQuery(value);
+                        }}
+                        className="focus:outline-none"
+                        autoFocus
                       />
                       <CommandList>
                         {isSearching ? (
@@ -482,7 +486,7 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                               <CommandItem
                                 key={stock.symbol}
                                 value={stock.symbol}
-                                className="cursor-pointer"
+                                className="cursor-pointer hover:bg-accent hover:text-accent-foreground"
                                 onSelect={() => {
                                   console.log("Selected stock:", stock);
                                   handleSelectStock(stock);
@@ -490,7 +494,15 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                                   setSearchOpen(false);
                                 }}
                               >
-                                <div className="flex items-center justify-between w-full cursor-pointer">
+                                <div 
+                                  className="flex items-center justify-between w-full"
+                                  onClick={() => {
+                                    console.log("Div clicked for stock:", stock);
+                                    handleSelectStock(stock);
+                                    setSearchQuery(stock.symbol);
+                                    setSearchOpen(false);
+                                  }}
+                                >
                                   <div className="flex items-center">
                                     <span className="font-bold">{stock.symbol}</span>
                                     <span className="ml-2 text-sm text-muted-foreground truncate">

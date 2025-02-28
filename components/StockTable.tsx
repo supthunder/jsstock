@@ -191,37 +191,45 @@ export function StockTable({ type = 'all' }: StockTableProps) {
                 // Get performance data
                 let performanceData = [];
                 let isMockPerformance = false;
+                let warningMessage = '';
                 
                 try {
                   console.log(`Fetching performance for ${symbol}...`);
                   const perfResponse = await fetch(`/api/stocks/performance?symbol=${symbol}&period=1m`);
                   
-                  if (!perfResponse.ok) {
-                    throw new Error(`API returned ${perfResponse.status}: ${await perfResponse.text()}`);
-                  }
-                  
                   const perfData = await perfResponse.json();
+                  
+                  // Check if the response contains a warning or has mock source
+                  if (perfData.warning || perfData.source === 'mock' || perfData.source === 'fallback') {
+                    console.log(`Using approximate data for ${symbol} performance: ${perfData.warning || 'Mock data'}`);
+                    isMockPerformance = true;
+                    warningMessage = perfData.warning || 'Using approximate data';
+                    if (!errors['Performance']) {
+                      errors['Performance'] = 'Using approximate data due to API limitations';
+                    }
+                  }
                   
                   if (perfData.candles && perfData.candles.length > 0) {
                     performanceData = perfData.candles.map((c: any) => c.close);
                     console.log(`Got ${performanceData.length} performance points for ${symbol}`);
-                    
-                    if (perfData.source === 'mock') {
-                      isMockPerformance = true;
-                      if (!errors['Performance']) {
-                        errors['Performance'] = 'Using mock data for some stocks';
-                      }
-                    }
-                  } else {
-                    console.warn(`No performance data for ${symbol}`);
-                    isMockPerformance = true;
+                  } 
+                  else if (perfData.performance !== undefined) {
+                    // Handle single performance value (mock data case)
+                    const basePrice = quoteData.price || 100;
+                    // Generate a realistic looking sparkline based on the performance percentage
+                    performanceData = generateMockPerformanceFromPercent(basePrice, perfData.performance);
+                    console.log(`Generated mock performance data for ${symbol} based on ${perfData.performance}% change`);
+                  }
+                  else {
+                    console.warn(`No performance data found for ${symbol}, generating mock data`);
                     performanceData = generateMockPerformance(quoteData.price);
+                    isMockPerformance = true;
                   }
                 } catch (perfError) {
                   console.error(`Error fetching performance for ${symbol}:`, perfError);
-                  isMockPerformance = true;
-                  errors['Performance'] = errors['Performance'] || 'API error for some stocks';
                   performanceData = generateMockPerformance(quoteData.price);
+                  isMockPerformance = true;
+                  errors['Performance'] = errors['Performance'] || 'API error for some stocks. Using approximate data.';
                 }
                 
                 // Add to stocks array
@@ -245,7 +253,8 @@ export function StockTable({ type = 'all' }: StockTableProps) {
                     comments: Math.floor(Math.random() * 500),
                     mentions: Math.floor(Math.random() * 300)
                   },
-                  isMockData: isMockPerformance
+                  isMockData: isMockPerformance,
+                  warning: warningMessage
                 });
                 
               } catch (symbolError) {
@@ -383,6 +392,23 @@ export function StockTable({ type = 'all' }: StockTableProps) {
     return Array(10).fill(0).map((_, i) => 
       basePrice * (1 + (Math.random() * 0.2 - 0.1) * (i/10))
     );
+  }
+  
+  // Generate mock performance data based on a known percentage change
+  function generateMockPerformanceFromPercent(basePrice: number, percentChange: number) {
+    const endPrice = basePrice;
+    const startPrice = basePrice / (1 + percentChange / 100);
+    const points = 10;
+    
+    // Create a somewhat realistic curve between start and end price
+    return Array(points).fill(0).map((_, i) => {
+      const progress = i / (points - 1);
+      // Add some randomness to make the line more realistic
+      const randomFactor = 1 + (Math.random() * 0.04 - 0.02);
+      // Calculate price at this point with a slight curve
+      const price = startPrice + (endPrice - startPrice) * Math.pow(progress, 0.8) * randomFactor;
+      return price;
+    });
   }
 
   return (
