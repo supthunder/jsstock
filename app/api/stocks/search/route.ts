@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POLYGON_API_KEY } from "@/lib/utils";
-import { popularStocks } from "@/lib/api";
+import { POLYGON_API_KEY, API_RATE_LIMITS } from "@/lib/utils";
+import { popularStocks, searchSymbols } from "@/lib/api";
 
 // GET /api/stocks/search?q=apple
 export async function GET(request: NextRequest) {
@@ -25,32 +25,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(mockResults);
     }
 
-    // Try the Polygon API first now that we have a valid key
+    // Use the enhanced searchSymbols function that tries multiple providers with fallbacks
     try {
-      const response = await fetch(
-        `https://api.polygon.io/v3/reference/tickers?search=${encodeURIComponent(query)}&active=true&sort=ticker&order=asc&limit=10&apiKey=${POLYGON_API_KEY}`
-      );
-
-      const data = await response.json();
-
-      if (data.results && data.results.length > 0) {
-        // Map the results to a simpler format
-        const results = data.results.map((item: any) => ({
-          symbol: item.ticker,
-          name: item.name,
-          type: item.type.toLowerCase(),
-          market: item.market,
-          currencySymbol: "$" // Default to USD
+      const data = await searchSymbols(query);
+      
+      // Format the results in a consistent way regardless of which API provided the data
+      if (data.bestMatches && data.bestMatches.length > 0) {
+        const results = data.bestMatches.map((item: any) => ({
+          symbol: item["1. symbol"],
+          name: item["2. name"],
+          type: item["3. type"].toLowerCase(),
+          market: item["4. region"]
         }));
-
+        
         return NextResponse.json(results);
       }
-    } catch (apiError) {
-      console.warn("Polygon API error, falling back to mock data:", apiError);
-      // Continue to fallback if API fails
+    } catch (error) {
+      console.error("Error from search API:", error);
+      // Continue to fallback if the enhanced API call fails
     }
-
-    // Fall back to mock data if API call fails or returns no results
+    
+    // Final fallback to mock data if everything else fails
     const filteredStocks = popularStocks
       .filter(s => s.toLowerCase().includes(query.toLowerCase()))
       .slice(0, 5)
@@ -59,7 +54,7 @@ export async function GET(request: NextRequest) {
         name: `${symbol} Stock`,
         type: "stock"
       }));
-    
+      
     return NextResponse.json(filteredStocks);
   } catch (error) {
     console.error("Error searching stocks:", error);

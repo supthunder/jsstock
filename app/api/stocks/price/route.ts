@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POLYGON_API_KEY } from "@/lib/utils";
+import { POLYGON_API_KEY, API_RATE_LIMITS } from "@/lib/utils";
+import { getStockQuote } from "@/lib/api";
 
 // Mock price data for development
 const mockPrices = {
@@ -49,38 +50,79 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Try to get real data from Polygon first
-    try {
-      let apiUrl;
-      
-      if (date) {
-        // Get historical price for the specified date
-        apiUrl = `https://api.polygon.io/v1/open-close/${symbol}/${date}?adjusted=true&apiKey=${POLYGON_API_KEY}`;
-      } else {
-        // Get the latest price
-        apiUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
+    // If a historical date is requested, we can't use the enhanced getStockQuote function
+    // because it's designed for current quotes
+    if (date) {
+      // First try Polygon if not rate limited
+      if (!API_RATE_LIMITS.polygon.isLimited) {
+        try {
+          const apiUrl = `https://api.polygon.io/v1/open-close/${symbol}/${date}?adjusted=true&apiKey=${POLYGON_API_KEY}`;
+          const response = await fetch(apiUrl);
+          const data = await response.json();
+          
+          // Check if we got a rate limit error
+          if (data.status === "ERROR" && data.error?.includes("exceeded the maximum requests")) {
+            // Mark polygon as rate limited
+            API_RATE_LIMITS.polygon.isLimited = true;
+            API_RATE_LIMITS.polygon.resetTime = new Date(Date.now() + 60000); // Reset after 1 minute
+            // Fall through to mock data
+          } else if (data.open !== undefined) {
+            // Format for historical data
+            return NextResponse.json({
+              symbol,
+              date,
+              open: data.open,
+              high: data.high,
+              low: data.low,
+              close: data.close,
+              volume: data.volume
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching historical price from Polygon:", error);
+          // Fall through to mock data
+        }
       }
-
-      const response = await fetch(apiUrl);
-      const data = await response.json();
-
-      if ((date && data.open !== undefined) || 
-          (!date && data.results && data.results.length > 0)) {
+      
+      // Fall back to mock data for historical prices if API call fails or is rate limited
+      if (mockPrices[symbol]) {
+        const mockData = mockPrices[symbol];
         
-        if (date) {
-          // Format for historical data
-          return NextResponse.json({
-            symbol,
-            date,
-            open: data.open,
-            high: data.high,
-            low: data.low,
-            close: data.close,
-            volume: data.volume
-          });
-        } else {
-          // Format for latest data
+        // Generate a slight variation for historical data
+        const variation = (Math.random() - 0.5) * 0.1; // ±5% variation
+        const basePrice = mockData.price * (1 + variation);
+        
+        return NextResponse.json({
+          symbol,
+          date,
+          open: basePrice * 0.99,
+          high: basePrice * 1.02,
+          low: basePrice * 0.98,
+          close: basePrice,
+          volume: Math.floor(Math.random() * 10000000) + 1000000
+        });
+      } else {
+        // Generate random mock data for any symbol
+        const mockPrice = Math.random() * 500 + 50;
+        
+        return NextResponse.json({
+          symbol,
+          date,
+          open: mockPrice * 0.99,
+          high: mockPrice * 1.02,
+          low: mockPrice * 0.98,
+          close: mockPrice,
+          volume: Math.floor(Math.random() * 10000000) + 1000000
+        });
+      }
+    } else {
+      // For current prices, use the enhanced getStockQuote function that handles multiple APIs
+      try {
+        const data = await getStockQuote(symbol);
+        
+        if (data.results && data.results.length > 0) {
           const result = data.results[0];
+          
           return NextResponse.json({
             symbol,
             date: new Date(result.t).toISOString().split('T')[0],
@@ -91,42 +133,41 @@ export async function GET(request: NextRequest) {
             volume: result.v
           });
         }
+      } catch (error) {
+        console.error("Error fetching current price:", error);
+        // Fall through to return the mock data (although the enhanced function should already handle this)
       }
-    } catch (apiError) {
-      console.warn("Polygon API error, falling back to mock data:", apiError);
-    }
-
-    // Fall back to mock data if API call fails or returns no results
-    // Check if we have mock data for this symbol
-    if (mockPrices[symbol]) {
-      const mockData = mockPrices[symbol];
-      const currentDate = new Date().toISOString().split('T')[0];
       
-      // Return mock data
-      return NextResponse.json({
-        symbol,
-        date: date || currentDate,
-        open: mockData.prevClose,
-        high: mockData.price * 1.02,
-        low: mockData.price * 0.98,
-        close: mockData.price,
-        volume: Math.floor(Math.random() * 10000000) + 1000000
-      });
+      // This code should rarely be reached since getStockQuote has its own mock data generation
+      if (mockPrices[symbol]) {
+        const mockData = mockPrices[symbol];
+        const currentDate = new Date().toISOString().split('T')[0];
+        
+        return NextResponse.json({
+          symbol,
+          date: currentDate,
+          open: mockData.prevClose,
+          high: mockData.price * 1.02,
+          low: mockData.price * 0.98,
+          close: mockData.price,
+          volume: Math.floor(Math.random() * 10000000) + 1000000
+        });
+      } else {
+        // Generate random data as final fallback
+        const mockPrice = Math.random() * 500 + 50;
+        const currentDate = new Date().toISOString().split('T')[0];
+        
+        return NextResponse.json({
+          symbol,
+          date: currentDate,
+          open: mockPrice * 0.99,
+          high: mockPrice * 1.02,
+          low: mockPrice * 0.98,
+          close: mockPrice,
+          volume: Math.floor(Math.random() * 10000000) + 1000000
+        });
+      }
     }
-    
-    // Generate random mock data as a last resort
-    const mockPrice = Math.random() * 500 + 50;
-    const currentDate = new Date().toISOString().split('T')[0];
-    
-    return NextResponse.json({
-      symbol,
-      date: date || currentDate,
-      open: mockPrice * 0.99,
-      high: mockPrice * 1.02,
-      low: mockPrice * 0.98,
-      close: mockPrice,
-      volume: Math.floor(Math.random() * 10000000) + 1000000
-    });
   } catch (error) {
     console.error("Error fetching stock price:", error);
     

@@ -5,6 +5,7 @@ const nextConfig = {
   env: {
     POLYGON_API_KEY: process.env.POLYGON_API_KEY,
     ALPHA_VANTAGE_API_KEY: process.env.ALPHA_VANTAGE_API_KEY,
+    FINNHUB_API_KEY: process.env.FINNHUB_API_KEY,
   },
   // Disable server-side WebSocket for development
   webpack: (config, { isServer }) => {
