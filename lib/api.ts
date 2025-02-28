@@ -146,8 +146,48 @@ export async function getStockQuote(symbol: string): Promise<any> {
 }
 
 export async function getMultipleStockQuotes(symbols: string[]): Promise<any> {
-  const promises = symbols.map(symbol => getStockQuote(symbol))
-  return Promise.all(promises)
+  console.log(`Getting quotes for ${symbols.length} symbols`);
+  
+  // Process in batches of 5 to avoid rate limits
+  const batchSize = 5;
+  const results = [];
+  
+  // Process in batches with delay between batches
+  for (let i = 0; i < symbols.length; i += batchSize) {
+    console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(symbols.length/batchSize)}`);
+    const batch = symbols.slice(i, i + batchSize);
+    
+    // Process the current batch in parallel
+    const batchPromises = batch.map(symbol => getStockQuote(symbol)
+      .catch(error => {
+        console.error(`Error fetching quote for ${symbol}:`, error);
+        // Return mock data on error
+        const mockPrice = Math.random() * 500 + 50;
+        return {
+          results: [{
+            T: symbol,
+            o: mockPrice * 0.99,
+            h: mockPrice * 1.02,
+            l: mockPrice * 0.98,
+            c: mockPrice,
+            v: Math.floor(Math.random() * 10000000) + 1000000,
+            t: Date.now()
+          }]
+        };
+      })
+    );
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // Add delay between batches to avoid rate limits
+    if (i + batchSize < symbols.length) {
+      console.log('Adding delay between batches to avoid rate limits');
+      await new Promise(resolve => setTimeout(resolve, 1200)); // 1.2 second delay
+    }
+  }
+  
+  return results;
 }
 
 export async function searchSymbols(query: string): Promise<any> {
@@ -246,112 +286,239 @@ export const finnhubServerOnlyAPIs = {
 
 // Try Finnhub as fallback if not rate limited
 export async function getStockPerformance(symbol: string, interval: string = '1d'): Promise<any> {
+  // Cache key based on symbol and interval
+  const cacheKey = `performance_${symbol}_${interval}`;
+  
+  // Check cache first
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const cachedData = JSON.parse(cached);
+      const cacheTime = cachedData.timestamp;
+      
+      // Use cache if less than 1 hour old
+      if (Date.now() - cacheTime < 60 * 60 * 1000) {
+        console.log(`Using cached performance data for ${symbol}`);
+        return cachedData.data;
+      }
+    } catch (e) {
+      console.warn(`Invalid cache for ${symbol} performance:`, e);
+      // Continue to fetch new data
+    }
+  }
+  
   // Try Polygon first if not rate limited
   if (!API_RATE_LIMITS.polygon.isLimited) {
     try {
+      // Build time range based on interval
+      const now = new Date();
+      const to = Math.floor(now.getTime() / 1000);
+      let from;
+      
+      switch (interval) {
+        case '1d':
+          from = Math.floor(new Date(now.getTime() - 24 * 60 * 60 * 1000).getTime() / 1000);
+          break;
+        case '1w':
+          from = Math.floor(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).getTime() / 1000);
+          break;
+        case '1m':
+        default:
+          from = Math.floor(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).getTime() / 1000);
+          break;
+      }
+      
+      // Get the appropriate resolution based on interval
+      let resolution;
+      switch (interval) {
+        case '1d': resolution = 'hour'; break;
+        case '1w': resolution = 'day'; break;
+        case '1m': resolution = 'day'; break;
+        default: resolution = 'day';
+      }
+      
+      console.log(`Fetching ${symbol} performance from Polygon: ${interval}, ${resolution}, ${from} to ${to}`);
+      
       const response = await fetch(
-        `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/2024-01-01/2024-12-31?adjusted=true&sort=asc&limit=120&apiKey=${POLYGON_API_KEY}`
+        `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/${resolution}/${from * 1000}/${to * 1000}?adjusted=true&sort=asc&limit=365&apiKey=${POLYGON_API_KEY}`
       );
+      
+      // Check for rate limit
+      if (response.status === 429) {
+        handleRateLimitError('polygon', "Rate limit exceeded");
+        throw new Error("Polygon rate limit exceeded");
+      }
+      
       const data = await response.json();
       
-      // Check if we got a rate limit error
-      if (data.status === "ERROR" && data.error?.includes("exceeded the maximum requests")) {
-        handleRateLimitError('polygon', data.error);
-        // Continue to fallback
-      } else {
+      // If successful, cache the result
+      if (data.results && data.results.length > 0) {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            data: data
+          }));
+        } catch (e) {
+          console.warn("Failed to cache performance data:", e);
+        }
+        
         return data;
       }
+      
+      throw new Error(`No performance data from Polygon for ${symbol}`);
     } catch (error) {
-      console.error("Polygon performance API error:", error);
+      console.error(`Polygon performance API error for ${symbol}:`, error);
       // Continue to fallback
     }
   }
   
-  // For Finnhub, we need to use our Next.js API rather than calling directly
-  // because of CORS restrictions
+  // Try Finnhub as fallback if not rate limited
   if (!API_RATE_LIMITS.finnhub.isLimited) {
     try {
-      // Get candle data via our API to avoid CORS issues
-      const to = Math.floor(Date.now() / 1000);
-      const from = to - 86400; // Last 24 hours
-      const resolution = interval === '1d' ? '5' : '60'; // Use 5 min for 1d interval, 60 min otherwise
+      // Build time range based on interval
+      const now = new Date();
+      const to = Math.floor(now.getTime() / 1000);
+      let from;
       
-      console.log(`Fetching performance data via server API for ${symbol} from=${from} to=${to} resolution=${resolution}`);
+      switch (interval) {
+        case '1d':
+          from = Math.floor(new Date(now.getTime() - 24 * 60 * 60 * 1000).getTime() / 1000);
+          break;
+        case '1w':
+          from = Math.floor(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).getTime() / 1000);
+          break;
+        case '1m':
+        default:
+          from = Math.floor(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).getTime() / 1000);
+          break;
+      }
       
-      // Route through our Next.js API
-      const requestUrl = `/api/finnhub/candles?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}`;
-      console.log("Requesting URL:", requestUrl);
+      // Get the appropriate resolution based on interval
+      let resolution;
+      switch (interval) {
+        case '1d': resolution = '60'; break;
+        case '1w': resolution = 'D'; break;
+        case '1m': resolution = 'D'; break;
+        default: resolution = 'D';
+      }
       
-      const response = await fetch(requestUrl);
+      console.log(`Fetching ${symbol} performance from Finnhub: ${interval}, ${resolution}, ${from} to ${to}`);
       
-      // Check for HTTP errors and log detailed information
+      // Use server-side API to avoid CORS and handle errors better
+      const response = await fetch(`/api/finnhub/candles?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}`);
+      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Server API returned status ${response.status}: ${errorText}`);
-        
-        if (response.status === 429) {
-          handleRateLimitError('finnhub', "Rate limit exceeded");
-        }
-        
-        throw new Error(`API returned ${response.status}: ${errorText}`);
+        throw new Error(`API returned ${response.status}: ${await response.text()}`);
       }
       
       const data = await response.json();
-      console.log("Received data:", data);
       
-      // Check for Finnhub specific errors
-      if (data.error) {
-        console.error("Finnhub API returned error:", data.error);
-        throw new Error(data.error);
-      }
-      
-      // Format to match Polygon structure
-      if (data.s === 'ok' && Array.isArray(data.t) && data.t.length > 0) {
-        const results = [];
-        for (let i = 0; i < data.t.length; i++) {
-          results.push({
-            o: data.o[i],
-            h: data.h[i],
-            l: data.l[i],
-            c: data.c[i],
-            v: data.v[i],
-            t: data.t[i] * 1000 // Convert seconds to milliseconds
-          });
+      // Check if we got valid data
+      if (data.s === 'ok' && data.c && data.c.length > 0) {
+        // Convert Finnhub format to match Polygon format for consistency
+        const results = data.t.map((timestamp: number, index: number) => ({
+          t: timestamp * 1000,
+          o: data.o[index],
+          h: data.h[index],
+          l: data.l[index],
+          c: data.c[index],
+          v: data.v[index]
+        }));
+        
+        const formattedData = {
+          ticker: symbol,
+          results: results,
+          // Add metadata about the source to help debugging
+          source: data.source || 'finnhub'
+        };
+        
+        // Cache the result
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            data: formattedData
+          }));
+        } catch (e) {
+          console.warn("Failed to cache performance data:", e);
         }
-        return { results };
-      } else if (data.s === 'no_data') {
-        console.warn(`No data available for symbol ${symbol}`);
-        // Continue to fallback for mock data
-      } else {
-        console.error("Invalid data format from Finnhub:", data);
-        throw new Error("Invalid data format from Finnhub");
+        
+        return formattedData;
       }
+      
+      throw new Error(`No performance data from Finnhub for ${symbol}: ${JSON.stringify(data)}`);
     } catch (error) {
-      console.error("Finnhub performance API error:", error);
-      // Continue to fallback with mock data
+      console.error(`Finnhub performance API error for ${symbol}:`, error);
+      // Fall back to mock data
     }
   }
   
-  // Fallback: generate mock performance data
-  console.log("All performance APIs failed or rate limited, using mock data for", symbol);
-  const results = [];
-  const basePrice = Math.random() * 500 + 50;
-  const now = Date.now();
+  // If all APIs fail or are rate limited, use mock data
+  console.log(`All performance APIs failed for ${symbol}, using mock data`);
   
-  for (let i = 0; i < 120; i++) {
-    const timeOffset = i * 60000; // 1 minute intervals
-    const price = basePrice * (1 + (Math.random() - 0.5) * 0.1); // Random fluctuation +/- 5%
+  // Create mock stock performance data
+  const now = new Date();
+  const results = [];
+  
+  // Number of data points based on interval
+  let numPoints;
+  switch (interval) {
+    case '1d': numPoints = 24; break;
+    case '1w': numPoints = 7; break;
+    case '1m': default: numPoints = 30; break;
+  }
+  
+  // Generate a deterministic baseline price based on symbol
+  const symbolSum = symbol.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+  const basePrice = 50 + (symbolSum % 200);  // Between $50 and $250
+  
+  // Create a random walk price pattern with some trend
+  const trendDirection = (symbolSum % 3 === 0) ? 1 : (symbolSum % 3 === 1) ? -1 : 0;
+  const trendStrength = 0.05 + (symbolSum % 10) / 100;  // 0.05% to 0.15% baseline trend per point
+  
+  let price = basePrice;
+  for (let i = 0; i < numPoints; i++) {
+    const timestamp = new Date(now.getTime() - (numPoints - i) * (24 * 60 * 60 * 1000 / numPoints));
+    
+    // Add some random variation + trend
+    const randomChange = (Math.random() - 0.5) * 0.01 * price;  // ±0.5% random variation
+    const trendChange = trendDirection * trendStrength * price;
+    price += randomChange + trendChange;
+    
+    // Ensure price stays positive with some min/max guardrails
+    price = Math.max(basePrice * 0.7, Math.min(basePrice * 1.3, price));
+    
+    // Derive other price points from closing price
+    const open = price * (1 + (Math.random() - 0.5) * 0.005);
+    const high = Math.max(open, price) * (1 + Math.random() * 0.005);
+    const low = Math.min(open, price) * (1 - Math.random() * 0.005);
+    
     results.push({
-      o: price * 0.99,
-      h: price * 1.02,
-      l: price * 0.98,
+      t: timestamp.getTime(),
+      o: open,
+      h: high,
+      l: low,
       c: price,
-      v: Math.floor(Math.random() * 100000) + 10000,
-      t: now - (120 - i) * 60000 // Timestamps from past to present
+      v: Math.floor(100000 + Math.random() * 900000)  // Random volume between 100K-1M
     });
   }
   
-  return { results };
+  const mockData = {
+    ticker: symbol,
+    results: results,
+    source: 'mock'  // Flag that this is mock data
+  };
+  
+  // Cache the mock data too
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({
+      timestamp: Date.now(),
+      data: mockData
+    }));
+  } catch (e) {
+    console.warn("Failed to cache mock performance data:", e);
+  }
+  
+  return mockData;
 }
 
 // Mock data for initial development

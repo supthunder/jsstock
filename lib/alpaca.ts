@@ -2,10 +2,15 @@
 import { Redis } from '@upstash/redis';
 
 // Alpaca API credentials
-export const ALPACA_API_KEY = 'PKVDOYT09VXMR4DRPIAC';
-export const ALPACA_API_SECRET = 'Xz5Et6hoEpy258TmJHydpoKd56jr6gyNmeywR9l8';
+export const ALPACA_API_KEY = process.env.ALPACA_API_KEY || '';
+export const ALPACA_API_SECRET = process.env.ALPACA_API_SECRET || '';
 export const ALPACA_BASE_URL = 'https://paper-api.alpaca.markets/v2';
 export const ALPACA_DATA_URL = 'https://data.alpaca.markets/v2';
+
+// Ensure credentials are properly loaded
+if (!ALPACA_API_KEY || !ALPACA_API_SECRET) {
+  console.warn('Alpaca API credentials not found in environment variables');
+}
 
 // Create Redis client for caching
 // You'll need to add @upstash/redis to your dependencies and configure with your Redis credentials

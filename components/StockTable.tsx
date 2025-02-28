@@ -136,6 +136,7 @@ export function StockTable({ type = 'all' }: StockTableProps) {
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [apiErrors, setApiErrors] = useState<{ [key: string]: string }>({})
 
   const handleStockUpdate = useCallback((symbol: string, data: any) => {
     setStocks(prevStocks => prevStocks.map(stock => {
@@ -154,28 +155,117 @@ export function StockTable({ type = 'all' }: StockTableProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch stock data
-        const quotesData = await getMultipleStockQuotes(popularStocks)
-        const stocksWithPerformance = await Promise.all(
-          quotesData.map(async (quote: any, index: number) => {
-            const performanceData = await getStockPerformance(popularStocks[index])
-            return {
-              ...quote,
-              performance: performanceData.results?.map((r: any) => r.c) || [],
-              wins: mockPerformanceData.wins[index] || 0,
-              losses: mockPerformanceData.losses[index] || 0,
-              draws: mockPerformanceData.draws[index] || 0,
-              winRate: (mockPerformanceData.wins[index] / 
-                (mockPerformanceData.wins[index] + mockPerformanceData.losses[index])) * 100,
-              socialMetrics: mockSocialMetrics[popularStocks[index]] || {
-                followers: 0,
-                comments: 0,
-                mentions: 0
+        console.log("Fetching stock data...");
+        const errors: { [key: string]: string } = {};
+        const stocksWithPerformance: any[] = [];
+        
+        // Get popular stocks data through our server-side API endpoints
+        // instead of direct API calls to Finnhub/Polygon
+        try {
+          // Fetch quotes through server API
+          console.log("Fetching quotes for popular stocks...");
+          
+          // Process stocks in batches to avoid overwhelming the server
+          const batchSize = 5;
+          
+          for (let i = 0; i < popularStocks.length; i += batchSize) {
+            const batch = popularStocks.slice(i, i + batchSize);
+            console.log(`Processing quotes batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(popularStocks.length/batchSize)}...`);
+            
+            // Process this batch in parallel
+            await Promise.all(batch.map(async (symbol) => {
+              try {
+                console.log(`Fetching data for ${symbol}...`);
+                
+                // Get quote data
+                const quoteResponse = await fetch(`/api/stocks/price?symbol=${symbol}`);
+                if (!quoteResponse.ok) {
+                  errors['Quotes API'] = `Error fetching price for ${symbol}: ${quoteResponse.status}`;
+                  console.error(`Error fetching quote for ${symbol}:`, await quoteResponse.text());
+                  return;
+                }
+                
+                const quoteData = await quoteResponse.json();
+                console.log(`Got quote for ${symbol}:`, quoteData);
+                
+                // Get performance data
+                let performanceData = [];
+                let isMockPerformance = false;
+                
+                try {
+                  console.log(`Fetching performance for ${symbol}...`);
+                  const perfResponse = await fetch(`/api/stocks/performance?symbol=${symbol}&period=1m`);
+                  
+                  if (!perfResponse.ok) {
+                    throw new Error(`API returned ${perfResponse.status}: ${await perfResponse.text()}`);
+                  }
+                  
+                  const perfData = await perfResponse.json();
+                  
+                  if (perfData.candles && perfData.candles.length > 0) {
+                    performanceData = perfData.candles.map((c: any) => c.close);
+                    console.log(`Got ${performanceData.length} performance points for ${symbol}`);
+                    
+                    if (perfData.source === 'mock') {
+                      isMockPerformance = true;
+                      if (!errors['Performance']) {
+                        errors['Performance'] = 'Using mock data for some stocks';
+                      }
+                    }
+                  } else {
+                    console.warn(`No performance data for ${symbol}`);
+                    isMockPerformance = true;
+                    performanceData = generateMockPerformance(quoteData.price);
+                  }
+                } catch (perfError) {
+                  console.error(`Error fetching performance for ${symbol}:`, perfError);
+                  isMockPerformance = true;
+                  errors['Performance'] = errors['Performance'] || 'API error for some stocks';
+                  performanceData = generateMockPerformance(quoteData.price);
+                }
+                
+                // Add to stocks array
+                const mockIndex = popularStocks.indexOf(symbol) % mockPerformanceData.wins.length;
+                stocksWithPerformance.push({
+                  symbol,
+                  price: quoteData.price,
+                  change: quoteData.change,
+                  changePercent: quoteData.changePercent,
+                  high: quoteData.high,
+                  low: quoteData.low,
+                  volume: quoteData.volume,
+                  performance: performanceData,
+                  wins: mockPerformanceData.wins[mockIndex] || 0,
+                  losses: mockPerformanceData.losses[mockIndex] || 0,
+                  draws: mockPerformanceData.draws[mockIndex] || 0,
+                  winRate: (mockPerformanceData.wins[mockIndex] / 
+                    (mockPerformanceData.wins[mockIndex] + mockPerformanceData.losses[mockIndex])) * 100,
+                  socialMetrics: mockSocialMetrics[symbol] || {
+                    followers: Math.floor(Math.random() * 1000),
+                    comments: Math.floor(Math.random() * 500),
+                    mentions: Math.floor(Math.random() * 300)
+                  },
+                  isMockData: isMockPerformance
+                });
+                
+              } catch (symbolError) {
+                console.error(`Error processing ${symbol}:`, symbolError);
               }
+            }));
+            
+            // Add small delay between batches
+            if (i + batchSize < popularStocks.length) {
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
-          })
-        )
-        setStocks(stocksWithPerformance)
+          }
+          
+          console.log(`Processed ${stocksWithPerformance.length} stocks with performance data`);
+          setStocks(stocksWithPerformance);
+        } catch (stocksError) {
+          console.error("Error fetching stocks:", stocksError);
+          errors['Stocks API'] = 'Failed to fetch stock data';
+          setStocks([]);
+        }
         
         // Fetch leaderboard data
         try {
@@ -190,21 +280,25 @@ export function StockTable({ type = 'all' }: StockTableProps) {
             if (Array.isArray(leaderboardData) && leaderboardData.length > 0) {
               setUsers(leaderboardData);
             } else {
-              // Fallback to mock data if no real users found
               console.log("No real users found, using mock data");
+              errors['Leaderboard'] = 'No real user data found. Using mock data.';
               setUsers(mockUserPerformance);
             }
           } else {
             console.error("Failed to fetch leaderboard data:", await leaderboardResponse.text());
+            errors['Leaderboard'] = `API error (${leaderboardResponse.status}). Using mock data.`;
             setUsers(mockUserPerformance);
           }
-        } catch (error) {
-          console.error("Error fetching leaderboard data:", error);
+        } catch (leaderboardError) {
+          console.error("Error fetching leaderboard data:", leaderboardError);
+          errors['Leaderboard'] = 'Failed to fetch data. Using mock data.';
           // Fallback to mock data on error
           setUsers(mockUserPerformance);
         }
         
-        setLoading(false)
+        // Update API errors state
+        setApiErrors(errors);
+        setLoading(false);
 
         // Set up WebSocket subscriptions
         const subscriptions = stocksWithPerformance.map(stock => 
@@ -284,11 +378,36 @@ export function StockTable({ type = 'all' }: StockTableProps) {
     );
   }
 
+  // Helper function to generate mock performance data
+  function generateMockPerformance(basePrice: number) {
+    return Array(10).fill(0).map((_, i) => 
+      basePrice * (1 + (Math.random() * 0.2 - 0.1) * (i/10))
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center pb-4">
         <h2 className="text-2xl font-bold">Portfolio Leaderboard</h2>
       </div>
+      
+      {/* Display API errors if any exist */}
+      {Object.keys(apiErrors).length > 0 && (
+        <div className="p-4 mb-4 bg-amber-50 border border-amber-200 rounded-md">
+          <h3 className="text-amber-800 font-medium mb-2">API Connection Issues</h3>
+          <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
+            {Object.entries(apiErrors).map(([api, error]) => (
+              <li key={api}>
+                <span className="font-medium">{api}:</span> {error}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-amber-600 mt-2">
+            The application is continuing with cached or mock data. Some information may not be current.
+          </p>
+        </div>
+      )}
+      
       {loading ? (
         <div className="text-center p-8 border rounded-md">
           <h3 className="text-lg font-medium">Loading...</h3>
