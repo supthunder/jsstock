@@ -51,7 +51,9 @@ export async function getStockPerformance(symbol: string, interval: string = '1d
 
 // Mock data for initial development
 export const popularStocks = [
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'JPM', 'V', 'WMT'
+  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'JPM', 'V', 'WMT',
+  'NFLX', 'DIS', 'PYPL', 'ADBE', 'INTC', 'CMCSA', 'PEP', 'CSCO', 'AVGO', 'ABT',
+  'ACN', 'TXN', 'QCOM', 'COST', 'NKE', 'AMD', 'CHTR', 'TMUS', 'SBUX', 'GILD'
 ]
 
 export const mockPerformanceData = {

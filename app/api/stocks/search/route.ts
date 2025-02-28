@@ -25,31 +25,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(mockResults);
     }
 
-    // Call Polygon API to search for stocks
-    const response = await fetch(
-      `https://api.polygon.io/v3/reference/tickers?search=${encodeURIComponent(query)}&active=true&sort=ticker&order=asc&limit=10&apiKey=${POLYGON_API_KEY}`
-    );
+    // Try the Polygon API first now that we have a valid key
+    try {
+      const response = await fetch(
+        `https://api.polygon.io/v3/reference/tickers?search=${encodeURIComponent(query)}&active=true&sort=ticker&order=asc&limit=10&apiKey=${POLYGON_API_KEY}`
+      );
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!data.results) {
-      return NextResponse.json([]);
+      if (data.results && data.results.length > 0) {
+        // Map the results to a simpler format
+        const results = data.results.map((item: any) => ({
+          symbol: item.ticker,
+          name: item.name,
+          type: item.type.toLowerCase(),
+          market: item.market,
+          currencySymbol: "$" // Default to USD
+        }));
+
+        return NextResponse.json(results);
+      }
+    } catch (apiError) {
+      console.warn("Polygon API error, falling back to mock data:", apiError);
+      // Continue to fallback if API fails
     }
 
-    // Map the results to a simpler format
-    const results = data.results.map((item: any) => ({
-      symbol: item.ticker,
-      name: item.name,
-      type: item.type.toLowerCase(),
-      market: item.market,
-      currencySymbol: "$" // Default to USD
-    }));
-
-    return NextResponse.json(results);
+    // Fall back to mock data if API call fails or returns no results
+    const filteredStocks = popularStocks
+      .filter(s => s.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 5)
+      .map(symbol => ({
+        symbol,
+        name: `${symbol} Stock`,
+        type: "stock"
+      }));
+    
+    return NextResponse.json(filteredStocks);
   } catch (error) {
     console.error("Error searching stocks:", error);
     
-    // Fallback to mock data if API fails
+    // Fallback to mock data if everything fails
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q") || "";
     
