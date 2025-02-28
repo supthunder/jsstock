@@ -107,30 +107,36 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
     const fetchSearchResults = async () => {
       if (searchQuery.length > 1) {
         setIsSearching(true);
-        console.log("Searching for stocks with query:", searchQuery);
+        console.log("🔍 Search query:", searchQuery);
         
         try {
-          const result = await fetch(`/api/stocks/search?q=${encodeURIComponent(searchQuery)}`);
+          const searchUrl = `/api/stocks/search?q=${encodeURIComponent(searchQuery)}`;
+          console.log("🔍 Calling search API:", searchUrl);
+          
+          const result = await fetch(searchUrl);
+          
+          console.log("🔍 Search API response status:", result.status);
           
           if (!result.ok) {
-            console.error(`Search API returned status: ${result.status}`);
+            console.error(`❌ Search API error (${result.status}):`, await result.text());
             setIsSearching(false);
             setSearchResults([]);
             return;
           }
           
           const data = await result.json();
-          console.log("Search results:", data);
+          console.log("🔍 Search results:", data);
           
           // Ensure data is an array before setting it
           if (Array.isArray(data)) {
+            console.log(`✅ Found ${data.length} matching stocks`);
             setSearchResults(data);
           } else {
-            console.error("Expected array but got:", typeof data, data);
+            console.error("❌ Expected array but got:", typeof data, data);
             setSearchResults([]);
           }
         } catch (error) {
-          console.error("Error fetching stock search results:", error);
+          console.error("❌ Search API exception:", error);
           setSearchResults([]);
         } finally {
           setIsSearching(false);
@@ -138,6 +144,30 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
       } else {
         setSearchResults([]);
       }
+    };
+
+    // Add to window for debugging
+    // @ts-ignore
+    window.testStockSearch = (query) => {
+      console.log("🧪 Testing stock search with query:", query);
+      fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`)
+        .then(res => {
+          console.log("🧪 Status:", res.status);
+          return res.text();
+        })
+        .then(text => {
+          try {
+            // Try to parse as JSON to check format
+            const data = JSON.parse(text);
+            console.log("🧪 Parsed response:", data);
+            return data;
+          } catch (e) {
+            // Not JSON, just show the text
+            console.log("🧪 Raw response:", text);
+            throw e;
+          }
+        })
+        .catch(err => console.error("🧪 Test error:", err));
     };
 
     const timeoutId = setTimeout(fetchSearchResults, 300);
@@ -454,7 +484,7 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                                   key={stock.symbol}
                                   onSelect={() => {
                                     console.log("Selected stock:", stock);
-                                    setSymbol(stock.symbol);
+                                    handleSelectStock(stock);
                                     setSearchQuery(stock.symbol);
                                     setSearchOpen(false);
                                   }}

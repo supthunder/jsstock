@@ -276,24 +276,37 @@ export async function getStockPerformance(symbol: string, interval: string = '1d
       const from = to - 86400; // Last 24 hours
       const resolution = interval === '1d' ? '5' : '60'; // Use 5 min for 1d interval, 60 min otherwise
       
-      console.log("Fetching performance data via server API to avoid CORS");
+      console.log(`Fetching performance data via server API for ${symbol} from=${from} to=${to} resolution=${resolution}`);
       
       // Route through our Next.js API
-      const response = await fetch(
-        `/api/finnhub/candles?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}`
-      );
+      const requestUrl = `/api/finnhub/candles?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}`;
+      console.log("Requesting URL:", requestUrl);
       
+      const response = await fetch(requestUrl);
+      
+      // Check for HTTP errors and log detailed information
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Server API returned status ${response.status}: ${errorText}`);
+        
         if (response.status === 429) {
           handleRateLimitError('finnhub', "Rate limit exceeded");
         }
-        throw new Error(`API returned ${response.status}`);
+        
+        throw new Error(`API returned ${response.status}: ${errorText}`);
       }
       
       const data = await response.json();
+      console.log("Received data:", data);
+      
+      // Check for Finnhub specific errors
+      if (data.error) {
+        console.error("Finnhub API returned error:", data.error);
+        throw new Error(data.error);
+      }
       
       // Format to match Polygon structure
-      if (data.s === 'ok') {
+      if (data.s === 'ok' && Array.isArray(data.t) && data.t.length > 0) {
         const results = [];
         for (let i = 0; i < data.t.length; i++) {
           results.push({
@@ -306,9 +319,16 @@ export async function getStockPerformance(symbol: string, interval: string = '1d
           });
         }
         return { results };
+      } else if (data.s === 'no_data') {
+        console.warn(`No data available for symbol ${symbol}`);
+        // Continue to fallback for mock data
+      } else {
+        console.error("Invalid data format from Finnhub:", data);
+        throw new Error("Invalid data format from Finnhub");
       }
     } catch (error) {
       console.error("Finnhub performance API error:", error);
+      // Continue to fallback with mock data
     }
   }
   
