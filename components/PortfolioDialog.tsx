@@ -482,6 +482,7 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                               <CommandItem
                                 key={stock.symbol}
                                 value={stock.symbol}
+                                className="cursor-pointer"
                                 onSelect={() => {
                                   console.log("Selected stock:", stock);
                                   handleSelectStock(stock);
@@ -489,7 +490,7 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                                   setSearchOpen(false);
                                 }}
                               >
-                                <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center justify-between w-full cursor-pointer">
                                   <div className="flex items-center">
                                     <span className="font-bold">{stock.symbol}</span>
                                     <span className="ml-2 text-sm text-muted-foreground truncate">

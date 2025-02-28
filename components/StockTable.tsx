@@ -130,7 +130,7 @@ export function StockTable({ type = 'all' }: StockTableProps) {
   // Type assertion for the session user
   const user = session?.user as ExtendedUser | undefined
   const [stocks, setStocks] = useState<any[]>([])
-  const [users, setUsers] = useState(mockUserPerformance)
+  const [users, setUsers] = useState<any[]>([])
   const [sortField, setSortField] = useState<SortField>('totalValue')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [loading, setLoading] = useState(true)
@@ -154,6 +154,7 @@ export function StockTable({ type = 'all' }: StockTableProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch stock data
         const quotesData = await getMultipleStockQuotes(popularStocks)
         const stocksWithPerformance = await Promise.all(
           quotesData.map(async (quote: any, index: number) => {
@@ -175,6 +176,34 @@ export function StockTable({ type = 'all' }: StockTableProps) {
           })
         )
         setStocks(stocksWithPerformance)
+        
+        // Fetch leaderboard data
+        try {
+          console.log("Fetching leaderboard data...");
+          const leaderboardResponse = await fetch('/api/leaderboard');
+          
+          if (leaderboardResponse.ok) {
+            const leaderboardData = await leaderboardResponse.json();
+            console.log("Leaderboard data:", leaderboardData);
+            
+            // Only use real data if we got some users
+            if (Array.isArray(leaderboardData) && leaderboardData.length > 0) {
+              setUsers(leaderboardData);
+            } else {
+              // Fallback to mock data if no real users found
+              console.log("No real users found, using mock data");
+              setUsers(mockUserPerformance);
+            }
+          } else {
+            console.error("Failed to fetch leaderboard data:", await leaderboardResponse.text());
+            setUsers(mockUserPerformance);
+          }
+        } catch (error) {
+          console.error("Error fetching leaderboard data:", error);
+          // Fallback to mock data on error
+          setUsers(mockUserPerformance);
+        }
+        
         setLoading(false)
 
         // Set up WebSocket subscriptions
@@ -197,6 +226,7 @@ export function StockTable({ type = 'all' }: StockTableProps) {
       fetchData()
     } else {
       // Load mock data even without session for demo purposes
+      setUsers(mockUserPerformance);
       setLoading(false)
     }
   }, [type, session, handleStockUpdate])
