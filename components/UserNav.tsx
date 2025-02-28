@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { PortfolioDialog } from "@/components/PortfolioDialog"
 
 export function UserNav() {
   const { data: session, status } = useSession()
@@ -52,14 +53,19 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>
-            <Link href="/profile">Profile</Link>
+          <DropdownMenuItem asChild>
+            <PortfolioDialog>
+              <button className="w-full text-left cursor-default select-none">Portfolio</button>
+            </PortfolioDialog>
           </DropdownMenuItem>
           <DropdownMenuItem>
-            <Link href="/settings">Settings</Link>
+            <Link href="/profile" className="w-full">Profile</Link>
           </DropdownMenuItem>
           <DropdownMenuItem>
-            <Link href="/watchlist">Watchlist</Link>
+            <Link href="/settings" className="w-full">Settings</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Link href="/watchlist" className="w-full">Watchlist</Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
