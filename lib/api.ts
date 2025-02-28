@@ -218,6 +218,33 @@ export async function searchSymbols(query: string): Promise<any> {
   };
 }
 
+// Finnhub API functions that should only be called server-side
+// because of CORS restrictions
+export const finnhubServerOnlyAPIs = {
+  async getCandles(symbol: string, resolution: string, from: number, to: number): Promise<any> {
+    try {
+      const response = await fetch(
+        `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}&token=${FINNHUB_API_KEY}`
+      );
+      
+      if (response.status === 429) {
+        handleRateLimitError('finnhub', "Rate limit exceeded");
+        throw new Error('Finnhub rate limit exceeded');
+      }
+      
+      const data = await response.json();
+      if (data.s === 'ok') {
+        return data;
+      }
+      throw new Error('Failed to get candle data from Finnhub');
+    } catch (error) {
+      console.error("Finnhub getCandles API error:", error);
+      throw error;
+    }
+  }
+}
+
+// Try Finnhub as fallback if not rate limited
 export async function getStockPerformance(symbol: string, interval: string = '1d'): Promise<any> {
   // Try Polygon first if not rate limited
   if (!API_RATE_LIMITS.polygon.isLimited) {
@@ -240,39 +267,45 @@ export async function getStockPerformance(symbol: string, interval: string = '1d
     }
   }
   
-  // Try Finnhub as fallback if not rate limited
+  // For Finnhub, we need to use our Next.js API rather than calling directly
+  // because of CORS restrictions
   if (!API_RATE_LIMITS.finnhub.isLimited) {
     try {
-      // Get candle data from Finnhub
+      // Get candle data via our API to avoid CORS issues
       const to = Math.floor(Date.now() / 1000);
       const from = to - 86400; // Last 24 hours
       const resolution = interval === '1d' ? '5' : '60'; // Use 5 min for 1d interval, 60 min otherwise
       
+      console.log("Fetching performance data via server API to avoid CORS");
+      
+      // Route through our Next.js API
       const response = await fetch(
-        `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}&token=${FINNHUB_API_KEY}`
+        `/api/finnhub/candles?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}`
       );
       
-      // Check for Finnhub rate limit (HTTP status 429)
-      if (response.status === 429) {
-        handleRateLimitError('finnhub', "Rate limit exceeded");
-        // All performance APIs tried, return mock data
-      } else {
-        const data = await response.json();
-        if (data.s === 'ok') {
-          // Format to match Polygon structure
-          const results = [];
-          for (let i = 0; i < data.t.length; i++) {
-            results.push({
-              o: data.o[i],
-              h: data.h[i],
-              l: data.l[i],
-              c: data.c[i],
-              v: data.v[i],
-              t: data.t[i] * 1000 // Convert seconds to milliseconds
-            });
-          }
-          return { results };
+      if (!response.ok) {
+        if (response.status === 429) {
+          handleRateLimitError('finnhub', "Rate limit exceeded");
         }
+        throw new Error(`API returned ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Format to match Polygon structure
+      if (data.s === 'ok') {
+        const results = [];
+        for (let i = 0; i < data.t.length; i++) {
+          results.push({
+            o: data.o[i],
+            h: data.h[i],
+            l: data.l[i],
+            c: data.c[i],
+            v: data.v[i],
+            t: data.t[i] * 1000 // Convert seconds to milliseconds
+          });
+        }
+        return { results };
       }
     } catch (error) {
       console.error("Finnhub performance API error:", error);

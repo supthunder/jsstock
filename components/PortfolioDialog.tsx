@@ -32,6 +32,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoading,
 } from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -89,6 +90,7 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
   const [searchResults, setSearchResults] = useState<StockItem[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
   
   // Portfolio state
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([])
@@ -103,24 +105,45 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
   
   // Search for stocks as user types
   useEffect(() => {
-    const searchStocks = async () => {
-      if (searchQuery.length < 2) {
-        setSearchResults([])
-        return
+    const fetchSearchResults = async () => {
+      if (searchQuery.length > 1) {
+        setIsSearching(true);
+        console.log("Searching for stocks with query:", searchQuery);
+        
+        try {
+          const result = await fetch(`/api/stocks/search?q=${encodeURIComponent(searchQuery)}`);
+          
+          if (!result.ok) {
+            console.error(`Search API returned status: ${result.status}`);
+            setIsSearching(false);
+            setSearchResults([]);
+            return;
+          }
+          
+          const data = await result.json();
+          console.log("Search results:", data);
+          
+          // Ensure data is an array before setting it
+          if (Array.isArray(data)) {
+            setSearchResults(data);
+          } else {
+            console.error("Expected array but got:", typeof data, data);
+            setSearchResults([]);
+          }
+        } catch (error) {
+          console.error("Error fetching stock search results:", error);
+          setSearchResults([]);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setSearchResults([]);
       }
-      
-      try {
-        const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(searchQuery)}`)
-        const data = await response.json()
-        setSearchResults(data)
-      } catch (error) {
-        console.error("Error searching stocks:", error)
-      }
-    }
-    
-    const timer = setTimeout(searchStocks, 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery])
+    };
+
+    const timeoutId = setTimeout(fetchSearchResults, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
   
   // Fetch portfolio data
   const fetchPortfolio = async () => {
@@ -412,18 +435,37 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                         onValueChange={setSearchQuery}
                       />
                       <CommandList>
-                        <CommandEmpty>No results found.</CommandEmpty>
-                        <CommandGroup>
-                          {searchResults.map((stock) => (
-                            <CommandItem
-                              key={stock.symbol}
-                              onSelect={() => handleSelectStock(stock)}
-                            >
-                              <span className="font-medium">{stock.symbol}</span>
-                              <span className="ml-2 text-muted-foreground">{stock.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
+                        {isSearching ? (
+                          <CommandLoading>Searching...</CommandLoading>
+                        ) : searchResults.length === 0 ? (
+                          <CommandEmpty>
+                            {searchQuery.length > 1 
+                              ? "No results found." 
+                              : "Type at least 2 characters to search..."}
+                          </CommandEmpty>
+                        ) : (
+                          <>
+                            <CommandGroup heading="Stocks">
+                              {searchResults.map((stock) => (
+                                <CommandItem
+                                  key={stock.symbol}
+                                  onSelect={() => {
+                                    console.log("Selected stock:", stock);
+                                    setSymbol(stock.symbol);
+                                    setSearchQuery(stock.symbol);
+                                    setSearchOpen(false);
+                                  }}
+                                  className="flex items-center"
+                                >
+                                  <span className="font-bold">{stock.symbol}</span>
+                                  <span className="ml-2 text-sm text-muted-foreground truncate">
+                                    {stock.name}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>
