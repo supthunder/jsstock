@@ -19,24 +19,22 @@ export default function Home() {
         </div>
       </div>
       <div className="flex-1 space-y-4 p-4 pt-6">
+        <div className="flex flex-col space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Stock Portfolio Leaderboard</h1>
+          <p className="text-muted-foreground">
+            Track top performing investors and their portfolio performance.
+          </p>
+        </div>
         <div className="flex items-center space-x-2">
           <Tabs defaultValue="all" className="w-full">
             <div className="flex items-center justify-between">
               <TabsList className="bg-muted/50">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="stocks">Stocks</TabsTrigger>
-                <TabsTrigger value="crypto">Crypto</TabsTrigger>
-                <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+                <TabsTrigger value="all">All Traders</TabsTrigger>
+                <TabsTrigger value="watchlist">My Watchlist</TabsTrigger>
               </TabsList>
             </div>
             <TabsContent value="all" className="border-none p-0 outline-none">
               <StockTable />
-            </TabsContent>
-            <TabsContent value="stocks" className="border-none p-0 outline-none">
-              <StockTable type="stocks" />
-            </TabsContent>
-            <TabsContent value="crypto" className="border-none p-0 outline-none">
-              <StockTable type="crypto" />
             </TabsContent>
             <TabsContent value="watchlist" className="border-none p-0 outline-none">
               <StockTable type="watchlist" />

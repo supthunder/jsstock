@@ -23,16 +23,117 @@ interface StockTableProps {
   type?: 'all' | 'stocks' | 'crypto' | 'watchlist'
 }
 
-type SortField = 'rank' | 'pnl1d' | 'pnl7d' | 'pnl30d' | 'winRate'
+type SortField = 'rank' | 'totalValue' | 'pnl1d' | 'pnl7d' | 'pnl30d' | 'performance'
 type SortDirection = 'asc' | 'desc'
+
+// Define the extended user session type
+interface ExtendedUser {
+  name?: string;
+  email?: string;
+  image?: string;
+  id?: string;
+  role?: string;
+  watchlist?: string[];
+  portfolio?: Array<{
+    symbol: string;
+    quantity: number;
+    avgCost: number;
+  }>;
+}
+
+// Mock user portfolio performance data
+const mockUserPerformance = [
+  {
+    id: "1",
+    name: "John Smith",
+    email: "john@example.com",
+    image: "/avatars/01.png",
+    totalValue: 245780.50,
+    pnl1d: 3.2,
+    pnl1dValue: 7624.25,
+    pnl7d: 5.7,
+    pnl7dValue: 13250.48,
+    pnl30d: 12.4,
+    pnl30dValue: 27120.65,
+    performanceData: [120, 132, 101, 134, 90, 170, 180, 160, 150, 185],
+    portfolioSize: 8,
+    topHolding: "AAPL"
+  },
+  {
+    id: "2",
+    name: "Alice Johnson",
+    email: "alice@example.com",
+    image: "/avatars/02.png",
+    totalValue: 189452.75,
+    pnl1d: 2.8,
+    pnl1dValue: 5176.32,
+    pnl7d: 4.2,
+    pnl7dValue: 7636.24,
+    pnl30d: 9.8,
+    pnl30dValue: 16915.78,
+    performanceData: [100, 110, 105, 115, 108, 120, 125, 122, 130, 135],
+    portfolioSize: 5,
+    topHolding: "TSLA"
+  },
+  {
+    id: "3",
+    name: "Bob Williams",
+    email: "bob@example.com",
+    image: "/avatars/03.png",
+    totalValue: 321564.80,
+    pnl1d: -1.2,
+    pnl1dValue: -3890.42,
+    pnl7d: 3.5,
+    pnl7dValue: 10869.21,
+    pnl30d: 8.1,
+    pnl30dValue: 24111.47,
+    performanceData: [150, 145, 160, 155, 140, 160, 175, 170, 185, 180],
+    portfolioSize: 12,
+    topHolding: "META"
+  },
+  {
+    id: "4",
+    name: "Emma Davis",
+    email: "emma@example.com",
+    image: "/avatars/04.png",
+    totalValue: 178925.60,
+    pnl1d: 4.1,
+    pnl1dValue: 7035.56,
+    pnl7d: 6.8,
+    pnl7dValue: 11364.42,
+    pnl30d: 15.2,
+    pnl30dValue: 23627.58,
+    performanceData: [90, 110, 105, 120, 115, 130, 125, 140, 135, 150],
+    portfolioSize: 7,
+    topHolding: "NVDA"
+  },
+  {
+    id: "5",
+    name: "Michael Brown",
+    email: "michael@example.com",
+    image: "/avatars/05.png",
+    totalValue: 432780.25,
+    pnl1d: 1.5,
+    pnl1dValue: 6405.62,
+    pnl7d: 2.9,
+    pnl7dValue: 12179.75,
+    pnl30d: 7.4,
+    pnl30dValue: 29864.04,
+    performanceData: [200, 195, 210, 205, 220, 215, 225, 220, 230, 235],
+    portfolioSize: 15,
+    topHolding: "GOOGL"
+  }
+];
 
 export function StockTable({ type = 'all' }: StockTableProps) {
   const { data: session } = useSession()
+  // Type assertion for the session user
+  const user = session?.user as ExtendedUser | undefined
   const [stocks, setStocks] = useState<any[]>([])
-  const [sortField, setSortField] = useState<SortField>('rank')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [users, setUsers] = useState(mockUserPerformance)
+  const [sortField, setSortField] = useState<SortField>('totalValue')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
@@ -94,6 +195,9 @@ export function StockTable({ type = 'all' }: StockTableProps) {
 
     if (session) {
       fetchData()
+    } else {
+      // Load mock data even without session for demo purposes
+      setLoading(false)
     }
   }, [type, session, handleStockUpdate])
 
@@ -102,171 +206,176 @@ export function StockTable({ type = 'all' }: StockTableProps) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
     } else {
       setSortField(field)
-      setSortDirection('asc')
+      setSortDirection('desc') // Default to descending for most financial metrics
     }
   }
 
-  const sortedStocks = [...stocks].sort((a, b) => {
+  const sortedUsers = [...users].sort((a, b) => {
     const modifier = sortDirection === 'asc' ? 1 : -1
     switch (sortField) {
+      case 'totalValue':
+        return (a.totalValue - b.totalValue) * modifier
       case 'pnl1d':
-        return (a.todaysChange - b.todaysChange) * modifier
-      case 'winRate':
-        return (a.winRate - b.winRate) * modifier
+        return (a.pnl1d - b.pnl1d) * modifier
+      case 'pnl7d':
+        return (a.pnl7d - b.pnl7d) * modifier
+      case 'pnl30d':
+        return (a.pnl30d - b.pnl30d) * modifier
+      case 'performance':
+        // Calculate performance based on the last value compared to first value in performance data
+        const aPerf = a.performanceData[a.performanceData.length - 1] - a.performanceData[0];
+        const bPerf = b.performanceData[b.performanceData.length - 1] - b.performanceData[0];
+        return (aPerf - bPerf) * modifier;
       default:
         return 0
     }
-  })
+  });
 
-  const filterButtons = [
-    { label: 'All', value: 'all' },
-    { label: 'Smart Money', value: 'smart' },
-    { label: 'Fresh Wallet', value: 'fresh' },
-    { label: 'KOL/VC', value: 'kol' },
-    { label: 'Sniper', value: 'sniper' },
-  ]
-
-  const handleRowClick = (stock: any) => {
-    setSelectedStock(stock)
-    setDetailOpen(true)
+  // Helper function to get rank badges
+  const getRankBadge = (index: number) => {
+    if (index === 0) return <Badge className="bg-yellow-500">🏆 1st</Badge>
+    if (index === 1) return <Badge className="bg-gray-400">🥈 2nd</Badge>
+    if (index === 2) return <Badge className="bg-amber-700">🥉 3rd</Badge>
+    return <Badge variant="outline">{index + 1}th</Badge>
   }
 
-  const filteredStocks = filterStocksByType(sortedStocks, filter)
+  const handleUserClick = (user: any) => {
+    // Could handle user profile viewing in future
+    console.log("User clicked:", user)
+  }
 
   // Apply additional filters based on the type prop
-  let displayedStocks = filteredStocks;
+  let displayedStocks = stocks;
   
   // Filter to only show watchlist stocks if type is 'watchlist'
-  if (type === 'watchlist' && session?.user?.watchlist) {
+  if (type === 'watchlist' && user?.watchlist) {
     displayedStocks = displayedStocks.filter(stock => 
-      session.user.watchlist.includes(stock.symbol)
+      user.watchlist!.includes(stock.symbol)
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex space-x-2 pb-4">
-        {filterButtons.map((btn) => (
-          <Button
-            key={btn.value}
-            variant={filter === btn.value ? "default" : "outline"}
-            onClick={() => setFilter(btn.value)}
-            size="sm"
-          >
-            {btn.label}
-          </Button>
-        ))}
+      <div className="flex justify-between items-center pb-4">
+        <h2 className="text-2xl font-bold">Portfolio Leaderboard</h2>
       </div>
-      {session && type === 'watchlist' && displayedStocks.length === 0 ? (
+      {loading ? (
         <div className="text-center p-8 border rounded-md">
-          <h3 className="text-lg font-medium">Your watchlist is empty</h3>
-          <p className="text-muted-foreground">
-            Add stocks to your watchlist to track them here.
-          </p>
+          <h3 className="text-lg font-medium">Loading...</h3>
         </div>
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="w-[100px]">
-                  <Button variant="ghost" size="sm" onClick={() => handleSort('rank')}>
-                    Rank
+                <TableHead className="w-[80px]">Rank</TableHead>
+                <TableHead>Investor</TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('totalValue')}>
+                    Portfolio Value
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                   </Button>
                 </TableHead>
-                <TableHead>Symbol</TableHead>
                 <TableHead>
                   <Button variant="ghost" size="sm" onClick={() => handleSort('pnl1d')}>
                     1D PNL
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                   </Button>
                 </TableHead>
-                <TableHead>7D PNL</TableHead>
-                <TableHead>30D PNL</TableHead>
                 <TableHead>
-                  <Button variant="ghost" size="sm" onClick={() => handleSort('winRate')}>
-                    Win Rate
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('pnl7d')}>
+                    7D PNL
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                   </Button>
                 </TableHead>
-                <TableHead>Distribution</TableHead>
-                <TableHead>Performance</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Avg Cost</TableHead>
-                <TableHead>Last Trade</TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('pnl30d')}>
+                    30D PNL
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => handleSort('performance')}>
+                    Performance
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </TableHead>
+                <TableHead>Holdings</TableHead>
+                <TableHead>Top Position</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center">Loading...</TableCell>
+              {sortedUsers.map((user, index) => (
+                <TableRow 
+                  key={user.id} 
+                  className="hover:bg-muted/50 cursor-pointer"
+                  onClick={() => handleUserClick(user)}
+                >
+                  <TableCell>
+                    {getRankBadge(index)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center">
+                      <Avatar className="h-10 w-10 mr-2">
+                        <AvatarImage src={user.image} alt={user.name} />
+                        <AvatarFallback>{user.name.slice(0, 2)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-sm text-muted-foreground">{user.email}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">${user.totalValue.toLocaleString()}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className={user.pnl1d >= 0 ? "text-green-500" : "text-red-500"}>
+                      {user.pnl1d >= 0 ? "+" : ""}{user.pnl1d}%
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {user.pnl1dValue >= 0 ? "+" : ""}${Math.abs(user.pnl1dValue).toLocaleString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className={user.pnl7d >= 0 ? "text-green-500" : "text-red-500"}>
+                      {user.pnl7d >= 0 ? "+" : ""}{user.pnl7d}%
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {user.pnl7dValue >= 0 ? "+" : ""}${Math.abs(user.pnl7dValue).toLocaleString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className={user.pnl30d >= 0 ? "text-green-500" : "text-red-500"}>
+                      {user.pnl30d >= 0 ? "+" : ""}{user.pnl30d}%
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {user.pnl30dValue >= 0 ? "+" : ""}${Math.abs(user.pnl30dValue).toLocaleString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="w-[80px] h-[30px]">
+                      <Sparklines data={user.performanceData}>
+                        <SparklinesLine color={user.performanceData[user.performanceData.length - 1] >= user.performanceData[0] ? "#22c55e" : "#ef4444"} />
+                      </Sparklines>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{user.portfolioSize}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{user.topHolding}</Badge>
+                  </TableCell>
                 </TableRow>
-              ) : (
-                displayedStocks.map((stock, index) => (
-                  <TableRow 
-                    key={stock.symbol} 
-                    className="hover:bg-muted/50 cursor-pointer"
-                    onClick={() => handleRowClick(stock)}
-                  >
-                    <TableCell className="font-medium">{index + 1}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <Avatar className="h-8 w-8 mr-2">
-                          <AvatarFallback>{stock.symbol.slice(0, 2)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{stock.symbol}</div>
-                          <div className="text-sm text-muted-foreground">{stock.name}</div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className={stock.todaysChange >= 0 ? "text-green-500" : "text-red-500"}>
-                        {stock.todaysChange >= 0 ? "+" : ""}{stock.todaysChangePerc.toFixed(1)}%
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {stock.todaysChange >= 0 ? "+" : ""}${stock.todaysChange.toFixed(2)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-green-500">+5.2%</div>
-                      <div className="text-sm text-muted-foreground">+$8,120.8</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-green-500">+6.1%</div>
-                      <div className="text-sm text-muted-foreground">+$23.6K</div>
-                    </TableCell>
-                    <TableCell>{stock.winRate.toFixed(1)}%</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Badge variant="secondary">{stock.wins}</Badge>
-                        <Badge variant="destructive">{stock.losses}</Badge>
-                        <Badge variant="destructive">{stock.draws}</Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="w-[80px] h-[30px]">
-                        <Sparklines data={stock.performance || [5,10,5,20,8,15,12,8,20]}>
-                          <SparklinesLine color={stock.todaysChange >= 0 ? "#22c55e" : "#ef4444"} />
-                        </Sparklines>
-                      </div>
-                    </TableCell>
-                    <TableCell>2d</TableCell>
-                    <TableCell>${(stock.c || 0).toFixed(2)}</TableCell>
-                    <TableCell>1h ago</TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
         </div>
       )}
-      
       <StockDetailDialog 
-        stock={selectedStock}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
+        stock={selectedStock} 
+        open={detailOpen} 
+        onOpenChange={setDetailOpen} 
       />
     </div>
   )
