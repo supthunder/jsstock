@@ -65,6 +65,10 @@ if (process.env.NODE_ENV !== 'production') {
   seedInitialUsers();
 }
 
+// Determine if we're running in a Vercel deployment
+const isVercelDeployment = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_URL);
+const forceProduction = isVercelDeployment || process.env.NODE_ENV === 'production';
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as Adapter,
   providers: [
@@ -211,11 +215,29 @@ export const authOptions: NextAuthOptions = {
       name: `next-auth.session-token`,
       options: {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "none",
         path: "/",
-        secure: process.env.NODE_ENV === "production"
+        secure: true
       }
     },
+    callbackUrl: {
+      name: `next-auth.callback-url`,
+      options: {
+        sameSite: "none",
+        path: "/",
+        secure: true
+      }
+    },
+    csrfToken: {
+      name: `next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true
+      }
+    }
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV !== 'production',
 } 
