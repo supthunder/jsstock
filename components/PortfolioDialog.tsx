@@ -477,27 +477,29 @@ export function PortfolioDialog({ children, trigger }: PortfolioDialogProps) {
                               : "Type at least 2 characters to search..."}
                           </CommandEmpty>
                         ) : (
-                          <>
-                            <CommandGroup heading="Stocks">
-                              {searchResults.map((stock) => (
-                                <CommandItem
-                                  key={stock.symbol}
-                                  onSelect={() => {
-                                    console.log("Selected stock:", stock);
-                                    handleSelectStock(stock);
-                                    setSearchQuery(stock.symbol);
-                                    setSearchOpen(false);
-                                  }}
-                                  className="flex items-center"
-                                >
-                                  <span className="font-bold">{stock.symbol}</span>
-                                  <span className="ml-2 text-sm text-muted-foreground truncate">
-                                    {stock.name}
-                                  </span>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </>
+                          <CommandGroup heading="Stocks">
+                            {searchResults.map((stock) => (
+                              <CommandItem
+                                key={stock.symbol}
+                                value={stock.symbol}
+                                onSelect={() => {
+                                  console.log("Selected stock:", stock);
+                                  handleSelectStock(stock);
+                                  setSearchQuery(stock.symbol);
+                                  setSearchOpen(false);
+                                }}
+                              >
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center">
+                                    <span className="font-bold">{stock.symbol}</span>
+                                    <span className="ml-2 text-sm text-muted-foreground truncate">
+                                      {stock.name}
+                                    </span>
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
                         )}
                       </CommandList>
                     </Command>

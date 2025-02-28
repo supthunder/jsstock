@@ -3,6 +3,7 @@ import {
   ALPACA_API_KEY, 
   ALPACA_API_SECRET, 
   ALPACA_DATA_URL,
+  ALPACA_BASE_URL,
   CACHE_TTL,
   cacheHelper,
   getAlpacaHeaders,
@@ -200,20 +201,27 @@ export async function searchStocks(query: string): Promise<StockSearchResult[]> 
   
   try {
     // Alpaca doesn't have a direct search endpoint, but we can use the assets endpoint
-    // and filter the results
-    const response = await fetch(`${ALPACA_DATA_URL}/assets?status=active`, {
-      headers: getAlpacaHeaders(),
-    });
+    // from the Trading API (not the Data API)
+    const url = `${ALPACA_BASE_URL}/assets?status=active&asset_class=us_equity`;
+    console.log("Fetching assets from Alpaca:", url);
     
-    const assets = await handleResponse(response);
+    const response = await fetch(url, { headers: getAlpacaHeaders() });
+    
+    if (!response.ok) {
+      throw new Error(`Alpaca API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const assets = await response.json();
+    console.log(`Received ${assets.length} assets from Alpaca`);
     
     // Filter and normalize the results
     const lowercaseQuery = query.toLowerCase();
     const results = assets
-      .filter((asset: any) => 
-        asset.symbol.toLowerCase().includes(lowercaseQuery) || 
-        (asset.name && asset.name.toLowerCase().includes(lowercaseQuery))
-      )
+      .filter((asset: any) => {
+        const symbolMatch = asset.symbol?.toLowerCase().includes(lowercaseQuery);
+        const nameMatch = asset.name?.toLowerCase().includes(lowercaseQuery);
+        return symbolMatch || nameMatch;
+      })
       .slice(0, 15) // Limit to top 15 results
       .map((asset: any) => ({
         symbol: asset.symbol,
@@ -222,6 +230,9 @@ export async function searchStocks(query: string): Promise<StockSearchResult[]> 
         market: asset.exchange,
         currencySymbol: '$', // Assuming USD
       }));
+    
+    console.log(`Filtered to ${results.length} matching assets for "${query}"`);
+    console.log("First few results:", results.slice(0, 3));
     
     // Cache the result
     await cacheHelper.set(cacheKey, results, CACHE_TTL.STOCK_SEARCH);

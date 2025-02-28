@@ -34,6 +34,11 @@ export async function GET(request: NextRequest) {
     
     console.log(`📊 Search found ${results.length} results for "${query}"`);
     
+    // Send detailed results for debugging
+    if (results.length > 0) {
+      console.log(`First result: ${JSON.stringify(results[0])}`);
+    }
+    
     // If no results found, return filtered popular stocks
     if (!results || results.length === 0) {
       console.log("No results found, returning filtered popular stocks");
@@ -45,8 +50,9 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(results);
-  } catch (error) {
-    console.error("❌ Error in stocks search API:", error);
+  } catch (error: any) {
+    console.error("❌ Error in stocks search API:", error.message || error);
+    console.error("Stack trace:", error.stack);
     
     // Fallback to filtered popular stocks on error
     const filteredPopular = popularStocks.filter(stock => 
